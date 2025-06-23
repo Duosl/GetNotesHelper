@@ -26,14 +26,6 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '18'
-        cache: 'npm'
-    
-    - name: 安装依赖
-      run: |
-        # 如果项目有package.json，安装依赖
-        if [ -f package.json ]; then
-          npm ci
-        fi
         
     - name: 验证环境变量
       run: |
