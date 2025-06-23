@@ -1,0 +1,204 @@
+name: 同步GET笔记到飞书多维表格
+
+on:
+  # 每日23点执行 (UTC时间15点，对应北京时间23点)
+  schedule:
+    - cron: '0 15 * * *'
+  
+  # 支持手动触发
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '是否为测试运行（不实际导入数据）'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  sync-notes:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置Node.js环境
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: 安装依赖
+      run: |
+        # 如果项目有package.json，安装依赖
+        if [ -f package.json ]; then
+          npm ci
+        fi
+        
+    - name: 验证环境变量
+      run: |
+        echo "验证必要的环境变量是否已设置..."
+        
+        # 检查GET笔记Token
+        if [ -z "${{ secrets.GET_NOTES_TOKEN }}" ]; then
+          echo "❌ GET_NOTES_TOKEN 未设置"
+          exit 1
+        else
+          echo "✅ GET_NOTES_TOKEN 已设置"
+        fi
+        
+        # 检查飞书配置
+        if [ -z "${{ secrets.FEISHU_APP_ID }}" ]; then
+          echo "❌ FEISHU_APP_ID 未设置"
+          exit 1
+        else
+          echo "✅ FEISHU_APP_ID 已设置"
+        fi
+        
+        if [ -z "${{ secrets.FEISHU_APP_SECRET }}" ]; then
+          echo "❌ FEISHU_APP_SECRET 未设置"
+          exit 1
+        else
+          echo "✅ FEISHU_APP_SECRET 已设置"
+        fi
+        
+        if [ -z "${{ secrets.FEISHU_APP_TOKEN }}" ]; then
+          echo "❌ FEISHU_APP_TOKEN 未设置"
+          exit 1
+        else
+          echo "✅ FEISHU_APP_TOKEN 已设置"
+        fi
+        
+        if [ -z "${{ secrets.FEISHU_TABLE_ID }}" ]; then
+          echo "❌ FEISHU_TABLE_ID 未设置"
+          exit 1
+        else
+          echo "✅ FEISHU_TABLE_ID 已设置"
+        fi
+        
+        echo "所有必要的环境变量验证通过 ✅"
+    
+    - name: 执行笔记同步
+      env:
+        GET_NOTES_TOKEN: ${{ secrets.GET_NOTES_TOKEN }}
+        FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+        FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+        FEISHU_APP_TOKEN: ${{ secrets.FEISHU_APP_TOKEN }}
+        FEISHU_TABLE_ID: ${{ secrets.FEISHU_TABLE_ID }}
+        DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+      run: |
+        echo "开始执行GET笔记同步..."
+        echo "执行时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "时区: $(date '+%Z %z')"
+        
+        # 给脚本执行权限
+        chmod +x scripts/sync-notes.js
+        
+        # 执行同步脚本
+        node scripts/sync-notes.js
+        
+    - name: 同步结果通知
+      if: always()
+      run: |
+        if [ ${{ job.status }} == 'success' ]; then
+          echo "✅ GET笔记同步成功完成"
+          echo "完成时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        else
+          echo "❌ GET笔记同步失败"
+          echo "失败时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        fi
+        
+    # 可选：发送通知到飞书群聊（需要配置Webhook）
+    - name: 发送飞书通知
+      if: always() && secrets.FEISHU_WEBHOOK_URL
+      run: |
+        if [ ${{ job.status }} == 'success' ]; then
+          STATUS_EMOJI="✅"
+          STATUS_TEXT="成功"
+          STATUS_COLOR="green"
+        else
+          STATUS_EMOJI="❌"
+          STATUS_TEXT="失败"
+          STATUS_COLOR="red"
+        fi
+        
+        CURRENT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+        
+        curl -X POST "${{ secrets.FEISHU_WEBHOOK_URL }}" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"msg_type\": \"interactive\",
+            \"card\": {
+              \"elements\": [
+                {
+                  \"tag\": \"div\",
+                  \"text\": {
+                    \"content\": \"${STATUS_EMOJI} **GET笔记同步${STATUS_TEXT}**\",
+                    \"tag\": \"lark_md\"
+                  }
+                },
+                {
+                  \"tag\": \"div\",
+                  \"text\": {
+                    \"content\": \"执行时间: ${CURRENT_TIME}\",
+                    \"tag\": \"plain_text\"
+                  }
+                },
+                {
+                  \"tag\": \"div\",
+                  \"text\": {
+                    \"content\": \"仓库: ${{ github.repository }}\",
+                    \"tag\": \"plain_text\"
+                  }
+                },
+                {
+                  \"tag\": \"div\",
+                  \"text\": {
+                    \"content\": \"分支: ${{ github.ref_name }}\",
+                    \"tag\": \"plain_text\"
+                  }
+                }
+              ],
+              \"header\": {
+                \"title\": {
+                  \"content\": \"GET笔记自动同步\",
+                  \"tag\": \"plain_text\"
+                },
+                \"template\": \"${STATUS_COLOR}\"
+              }
+            }
+          }"
+
+  # 可选：定期清理工作流运行历史
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: sync-notes
+    if: always()
+    
+    steps:
+    - name: 清理旧的工作流运行记录
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // 保留最近30次运行记录，删除更早的记录
+          const { data: runs } = await github.rest.actions.listWorkflowRuns({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'sync-notes.yml',
+            per_page: 100
+          });
+          
+          const runsToDelete = runs.workflow_runs.slice(30);
+          
+          for (const run of runsToDelete) {
+            try {
+              await github.rest.actions.deleteWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: run.id
+              });
+              console.log(`已删除工作流运行记录: ${run.id}`);
+            } catch (error) {
+              console.log(`删除工作流运行记录失败: ${run.id}, 错误: ${error.message}`);
+            }
+          }

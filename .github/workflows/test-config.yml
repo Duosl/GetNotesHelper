@@ -1,0 +1,94 @@
+name: 测试配置
+
+on:
+  # 支持手动触发
+  workflow_dispatch:
+  
+  # 当修改配置相关文件时触发
+  push:
+    paths:
+      - 'scripts/**'
+      - '.github/workflows/**'
+      - '.env.example'
+
+jobs:
+  test-config:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置Node.js环境
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: 验证脚本语法
+      run: |
+        echo "验证JavaScript脚本语法..."
+        node -c scripts/sync-notes.js
+        node -c scripts/test-config.js
+        echo "✅ 脚本语法验证通过"
+    
+    - name: 测试配置验证逻辑
+      run: |
+        echo "测试配置验证逻辑..."
+        
+        # 测试缺少环境变量的情况
+        echo "测试缺少环境变量时的处理..."
+        if node scripts/test-config.js 2>/dev/null; then
+          echo "❌ 应该在缺少环境变量时失败"
+          exit 1
+        else
+          echo "✅ 正确处理了缺少环境变量的情况"
+        fi
+    
+    - name: 验证工作流文件
+      run: |
+        echo "验证GitHub Actions工作流文件..."
+        
+        # 检查必要的文件是否存在
+        if [ ! -f ".github/workflows/sync-notes.yml" ]; then
+          echo "❌ 同步工作流文件不存在"
+          exit 1
+        fi
+        
+        if [ ! -f "scripts/sync-notes.js" ]; then
+          echo "❌ 同步脚本不存在"
+          exit 1
+        fi
+        
+        if [ ! -f ".env.example" ]; then
+          echo "❌ 环境变量示例文件不存在"
+          exit 1
+        fi
+        
+        echo "✅ 所有必要文件都存在"
+    
+    - name: 检查文档完整性
+      run: |
+        echo "检查README文档..."
+        
+        # 检查README是否包含必要的配置说明
+        if ! grep -q "GitHub Action" README.md; then
+          echo "❌ README缺少GitHub Action说明"
+          exit 1
+        fi
+        
+        if ! grep -q "GET_NOTES_TOKEN" README.md; then
+          echo "❌ README缺少环境变量说明"
+          exit 1
+        fi
+        
+        if ! grep -q "FEISHU_APP_ID" README.md; then
+          echo "❌ README缺少飞书配置说明"
+          exit 1
+        fi
+        
+        echo "✅ README文档完整"
+    
+    - name: 测试结果
+      run: |
+        echo "🎉 所有测试通过！"
+        echo "项目配置正确，GitHub Action已准备就绪"
