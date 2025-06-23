@@ -38,44 +38,54 @@ jobs:
     - name: 验证环境变量
       run: |
         echo "验证必要的环境变量是否已设置..."
-        
+
+        MISSING_VARS=""
+
         # 检查GET笔记Token
         if [ -z "${{ secrets.GET_NOTES_TOKEN }}" ]; then
           echo "❌ GET_NOTES_TOKEN 未设置"
-          exit 1
+          MISSING_VARS="$MISSING_VARS GET_NOTES_TOKEN"
         else
           echo "✅ GET_NOTES_TOKEN 已设置"
         fi
-        
+
         # 检查飞书配置
         if [ -z "${{ secrets.FEISHU_APP_ID }}" ]; then
           echo "❌ FEISHU_APP_ID 未设置"
-          exit 1
+          MISSING_VARS="$MISSING_VARS FEISHU_APP_ID"
         else
           echo "✅ FEISHU_APP_ID 已设置"
         fi
-        
+
         if [ -z "${{ secrets.FEISHU_APP_SECRET }}" ]; then
           echo "❌ FEISHU_APP_SECRET 未设置"
-          exit 1
+          MISSING_VARS="$MISSING_VARS FEISHU_APP_SECRET"
         else
           echo "✅ FEISHU_APP_SECRET 已设置"
         fi
-        
+
         if [ -z "${{ secrets.FEISHU_APP_TOKEN }}" ]; then
           echo "❌ FEISHU_APP_TOKEN 未设置"
-          exit 1
+          MISSING_VARS="$MISSING_VARS FEISHU_APP_TOKEN"
         else
           echo "✅ FEISHU_APP_TOKEN 已设置"
         fi
-        
+
         if [ -z "${{ secrets.FEISHU_TABLE_ID }}" ]; then
           echo "❌ FEISHU_TABLE_ID 未设置"
-          exit 1
+          MISSING_VARS="$MISSING_VARS FEISHU_TABLE_ID"
         else
           echo "✅ FEISHU_TABLE_ID 已设置"
         fi
-        
+
+        # 如果有缺失的变量，退出并报错
+        if [ -n "$MISSING_VARS" ]; then
+          echo ""
+          echo "❌ 缺少必要的环境变量: $MISSING_VARS"
+          echo "请在仓库的 Settings > Secrets and variables > Actions 中配置这些变量"
+          exit 1
+        fi
+
         echo "所有必要的环境变量验证通过 ✅"
     
     - name: 执行笔记同步
@@ -108,64 +118,33 @@ jobs:
           echo "失败时间: $(date '+%Y-%m-%d %H:%M:%S')"
         fi
         
-    # 可选：发送通知到飞书群聊（需要配置Webhook）
+    # 可选：发送通知到飞书群聊（需要配置FEISHU_WEBHOOK_URL Secret）
     - name: 发送飞书通知
-      if: always() && secrets.FEISHU_WEBHOOK_URL
+      if: always()
+      env:
+        FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
       run: |
+        if [ -z "$FEISHU_WEBHOOK_URL" ]; then
+          echo "跳过飞书通知：未配置FEISHU_WEBHOOK_URL Secret"
+          exit 0
+        fi
+
         if [ ${{ job.status }} == 'success' ]; then
           STATUS_EMOJI="✅"
           STATUS_TEXT="成功"
-          STATUS_COLOR="green"
         else
           STATUS_EMOJI="❌"
           STATUS_TEXT="失败"
-          STATUS_COLOR="red"
         fi
-        
+
         CURRENT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
-        
-        curl -X POST "${{ secrets.FEISHU_WEBHOOK_URL }}" \
+
+        curl -X POST "$FEISHU_WEBHOOK_URL" \
           -H "Content-Type: application/json" \
           -d "{
-            \"msg_type\": \"interactive\",
-            \"card\": {
-              \"elements\": [
-                {
-                  \"tag\": \"div\",
-                  \"text\": {
-                    \"content\": \"${STATUS_EMOJI} **GET笔记同步${STATUS_TEXT}**\",
-                    \"tag\": \"lark_md\"
-                  }
-                },
-                {
-                  \"tag\": \"div\",
-                  \"text\": {
-                    \"content\": \"执行时间: ${CURRENT_TIME}\",
-                    \"tag\": \"plain_text\"
-                  }
-                },
-                {
-                  \"tag\": \"div\",
-                  \"text\": {
-                    \"content\": \"仓库: ${{ github.repository }}\",
-                    \"tag\": \"plain_text\"
-                  }
-                },
-                {
-                  \"tag\": \"div\",
-                  \"text\": {
-                    \"content\": \"分支: ${{ github.ref_name }}\",
-                    \"tag\": \"plain_text\"
-                  }
-                }
-              ],
-              \"header\": {
-                \"title\": {
-                  \"content\": \"GET笔记自动同步\",
-                  \"tag\": \"plain_text\"
-                },
-                \"template\": \"${STATUS_COLOR}\"
-              }
+            \"msg_type\": \"text\",
+            \"content\": {
+              \"text\": \"${STATUS_EMOJI} GET笔记自动同步${STATUS_TEXT}\\n\\n执行时间: ${CURRENT_TIME}\\n仓库: ${{ github.repository }}\\n分支: ${{ github.ref_name }}\"
             }
           }"
 

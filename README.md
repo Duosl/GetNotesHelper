@@ -19,16 +19,21 @@
 ### 2. 配置GitHub Secrets
 在你的仓库中，进入 `Settings` > `Secrets and variables` > `Actions`，添加以下Secrets：
 
+#### 必需的Secrets
 
+| Secret名称 | 说明 | 获取方式 |
+|-----------|------|----------|
+| `GET_NOTES_TOKEN` | GET笔记API访问令牌 | 从GET笔记应用中获取 |
+| `FEISHU_APP_ID` | 飞书应用ID | 飞书开放平台创建应用后获取 |
+| `FEISHU_APP_SECRET` | 飞书应用密钥 | 飞书开放平台应用管理页面获取 |
+| `FEISHU_APP_TOKEN` | 飞书多维表格App Token | 飞书多维表格设置中获取 |
+| `FEISHU_TABLE_ID` | 飞书多维表格ID | 飞书多维表格URL中获取 |
 
-   | Secret名称 | 说明 | 获取方式 |
-   |-----------|------|----------|
-   | `GET_NOTES_TOKEN` | GET笔记API访问令牌 | 从GET笔记应用中获取 |
-   | `FEISHU_APP_ID` | 飞书应用ID | 飞书开放平台创建应用后获取 |
-   | `FEISHU_APP_SECRET` | 飞书应用密钥 | 飞书开放平台应用管理页面获取 |
-   | `FEISHU_APP_TOKEN` | 飞书多维表格App Token | 飞书多维表格设置中获取 |
-   | `FEISHU_TABLE_ID` | 飞书多维表格ID | 飞书多维表格URL中获取 |
-   | `FEISHU_WEBHOOK_URL` | 飞书群聊机器人Webhook（可选） | 用于接收同步结果通知 |
+#### 可选的Secrets
+
+| Secret名称 | 说明 | 用途 |
+|-----------|------|------|
+| `FEISHU_WEBHOOK_URL` | 飞书群聊机器人Webhook | 接收同步结果通知（可选） |
 
 ### 3. 启用GitHub Actions
 确保你的仓库已启用GitHub Actions功能。
@@ -121,10 +126,10 @@ A: GitHub Actions的定时任务可能有延迟，也可能因为仓库不活跃
    source .env
 
    # 测试配置是否正确
-   npm run test-config
+   node scripts/test-config.js
 
    # 运行同步脚本
-   npm run sync-notes
+   node scripts/sync-notes.js
    ```
 
 ## 许可证
